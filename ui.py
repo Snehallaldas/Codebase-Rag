@@ -2,7 +2,7 @@
 import streamlit as st
 import requests
 
-API = "http://localhost:8000"
+API = "https://codebase-rag-h9hm.onrender.com"
 
 st.title("Codebase RAG")
 
