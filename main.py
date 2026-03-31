@@ -1,7 +1,7 @@
-# main.py
 import tempfile
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+
 from architect.summarizer import generate_architecture_summary
 from ingestion.repo_loader import load_from_github, collect_python_files
 from ingestion.ast_chunker import chunk_repository
@@ -15,9 +15,22 @@ from critic.feedback_store import log_feedback, load_feedback, average_scores
 app = FastAPI(title="Codebase RAG")
 
 
-# ── Pydantic Models (MUST be defined before routes) ──────
+# ✅ Root route (IMPORTANT for Render)
+@app.get("/")
+def home():
+    return {"status": "running"}
+
+
+# ✅ Health route (optional but useful)
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+
+# ── Pydantic Models ──────────────────────────────────────
 class IngestRequest(BaseModel):
     github_url: str
+
 
 class QueryRequest(BaseModel):
     question: str
@@ -30,8 +43,8 @@ def ingest(req: IngestRequest):
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_path = load_from_github(req.github_url, tmpdir)
-            py_files  = collect_python_files(repo_path)
-            chunks    = chunk_repository(py_files, repo_path)
+            py_files = collect_python_files(repo_path)
+            chunks = chunk_repository(py_files, repo_path)
             store_chunks(chunks)
         return {"status": "ok", "chunks_stored": len(chunks)}
     except Exception as e:
@@ -42,17 +55,17 @@ def ingest(req: IngestRequest):
 @app.post("/query")
 def query(req: QueryRequest):
     try:
-        chunks  = retrieve_chunks(req.question, top_k=req.top_k)
-        prompt  = build_prompt(req.question, chunks)
-        answer  = generate_answer(prompt)
+        chunks = retrieve_chunks(req.question, top_k=req.top_k)
+        prompt = build_prompt(req.question, chunks)
+        answer = generate_answer(prompt)
         return {
-            "answer":  answer,
+            "answer": answer,
             "sources": [
                 {
-                    "file":   c["file_path"],
-                    "name":   c["name"],
-                    "lines":  f"{c['start_line']}–{c['end_line']}",
-                    "score":  c["score"],
+                    "file": c["file_path"],
+                    "name": c["name"],
+                    "lines": f"{c['start_line']}–{c['end_line']}",
+                    "score": c["score"],
                 }
                 for c in chunks
             ],
@@ -65,20 +78,20 @@ def query(req: QueryRequest):
 @app.post("/query/evaluated")
 def query_evaluated(req: QueryRequest):
     try:
-        chunks  = retrieve_chunks(req.question, top_k=req.top_k)
-        prompt  = build_prompt(req.question, chunks)
-        answer  = generate_answer(prompt)
-        scores  = score_answer(req.question, chunks, answer)
+        chunks = retrieve_chunks(req.question, top_k=req.top_k)
+        prompt = build_prompt(req.question, chunks)
+        answer = generate_answer(prompt)
+        scores = score_answer(req.question, chunks, answer)
         log_feedback(req.question, chunks, answer, scores)
         return {
-            "answer":  answer,
-            "scores":  scores,
+            "answer": answer,
+            "scores": scores,
             "sources": [
                 {
-                    "file":   c["file_path"],
-                    "name":   c["name"],
-                    "lines":  f"{c['start_line']}–{c['end_line']}",
-                    "score":  c["score"],
+                    "file": c["file_path"],
+                    "name": c["name"],
+                    "lines": f"{c['start_line']}–{c['end_line']}",
+                    "score": c["score"],
                 }
                 for c in chunks
             ],
@@ -91,9 +104,10 @@ def query_evaluated(req: QueryRequest):
 @app.get("/feedback/summary")
 def feedback_summary():
     return {
-        "averages":      average_scores(),
+        "averages": average_scores(),
         "total_queries": len(load_feedback()),
     }
+
 
 # ── Architecture Summary ─────────────────────────────────
 @app.get("/architecture")
