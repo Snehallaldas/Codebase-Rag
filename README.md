@@ -1,16 +1,18 @@
 # 🔍 Codebase RAG — AI-Powered Code Understanding System
 
-A Retrieval-Augmented Generation (RAG) system that lets you upload any GitHub repository and ask natural language questions about the codebase. Built as a final year CS project.
+A Retrieval-Augmented Generation (RAG) system that lets you upload any GitHub repository and ask natural language questions about the codebase. Supports Python, JavaScript, TypeScript, HTML, JSON, and Markdown files.
+
+Built as a Final Year CS Project.
 
 ---
 
 ## 🚀 What it does
 
 - **Ingests** any public GitHub repository via URL
-- **Parses** Python files using AST-based chunking (by function/class boundaries)
+- **Parses** files using AST-based chunking for Python and regex-based chunking for JavaScript/TypeScript
 - **Embeds** code chunks into a ChromaDB vector store
 - **Answers** natural language questions with file path + line number citations
-- **Critiques** its own answers using a second Mistral AI agent
+- **Critiques** its own answers using a second Mistral AI agent (faithfulness, relevance, completeness)
 - **Summarizes** entire codebase architecture automatically
 
 ---
@@ -21,6 +23,7 @@ A Retrieval-Augmented Generation (RAG) system that lets you upload any GitHub re
 - "How are resumes parsed?"
 - "What database models exist?"
 - "Explain the architecture"
+- "What is the name of the person in this portfolio?"
 - "What happens on app startup?"
 
 ---
@@ -33,7 +36,8 @@ A Retrieval-Augmented Generation (RAG) system that lets you upload any GitHub re
 | Vector Store | ChromaDB |
 | Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
 | LLM | Mistral AI |
-| AST Parsing | Python `ast` module |
+| Python Parsing | Python `ast` module |
+| JS/TS Parsing | Regex-based chunker |
 | Repo Ingestion | GitPython |
 | Frontend | Streamlit |
 
@@ -42,22 +46,30 @@ A Retrieval-Augmented Generation (RAG) system that lets you upload any GitHub re
 ## 📁 Project Structure
 ```
 codebase_rag/
-├── ingestion/
-│   ├── repo_loader.py       # Clone GitHub repos, collect .py files
-│   ├── ast_chunker.py       # AST-based code chunking
-│   └── embedder.py          # Embed + store chunks in ChromaDB
-├── retrieval/
-│   ├── retriever.py         # Query ChromaDB
-│   ├── prompt_builder.py    # Build code-aware prompts
-│   └── generator.py         # Mistral AI answer generation
+├── architect/
+│   ├── __init__.py
+│   └── summarizer.py        # Broad sampling → architecture summary
 ├── critic/
+│   ├── __init__.py
 │   ├── critic_agent.py      # Score answers (faithfulness, relevance, completeness)
 │   └── feedback_store.py    # Log feedback to JSONL
-├── architect/
-│   └── summarizer.py        # Generate full architecture summary
-├── ui.py                    # Streamlit frontend
+├── ingestion/
+│   ├── __init__.py
+│   ├── ast_chunker.py       # AST chunking (Python) + regex chunking (JS/HTML/JSON/MD)
+│   ├── embedder.py          # Embed + store chunks in ChromaDB
+│   ├── repo_loader.py       # Clone GitHub repos, collect supported files
+│   └── run_ingest.py        # Standalone ingestion script
+├── retrieval/
+│   ├── __init__.py
+│   ├── generator.py         # Mistral AI answer generation
+│   ├── prompt_builder.py    # Build code-aware prompts with citations
+│   └── retriever.py         # Query ChromaDB
+├── .gitignore
+├── feedback_log.jsonl        # Auto-generated query feedback log
 ├── main.py                  # FastAPI app
-└── requirements.txt
+├── README.md
+├── requirements.txt
+└── ui.py                    # Streamlit frontend
 ```
 
 ---
@@ -91,15 +103,19 @@ MISTRAL_API_KEY=your_mistral_api_key_here
 
 ## ▶️ Running the App
 
-**Start the API:**
+**Terminal 1 — Start the backend:**
 ```bash
 uvicorn main:app --reload
 ```
 
-**Start the UI (in a separate terminal):**
+**Terminal 2 — Start the frontend:**
 ```bash
 python -m streamlit run ui.py
 ```
+
+Then open:
+- **Streamlit UI** → `http://localhost:8501`
+- **Swagger API** → `http://localhost:8000/docs`
 
 ---
 
@@ -115,11 +131,24 @@ python -m streamlit run ui.py
 
 ---
 
-## 📊 Sample Critic Scores
+## 🌐 Supported File Types
+
+| Language | Extensions |
+|---|---|
+| Python | `.py` |
+| JavaScript / TypeScript | `.js` `.ts` `.jsx` `.tsx` |
+| HTML | `.html` `.htm` |
+| JSON | `package.json` `data.json` `content.json` |
+| Markdown | `.md` |
+
+---
+
+## 📊 Sample Evaluation Results
 
 | Question | Faithfulness | Relevance | Completeness | Overall |
 |---|---|---|---|---|
 | How are resumes parsed? | 7 | 9 | 6 | 7 |
+| What is the app's architecture? | 8 | 9 | 7 | 8 |
 
 ---
 
@@ -129,30 +158,32 @@ GitHub URL
     ↓
 Repo Loader (GitPython)
     ↓
-AST Chunker (function/class boundaries)
+AST / Regex Chunker (Python, JS, HTML, JSON, MD)
     ↓
 ChromaDB (vector store)
     ↓
 User Question → Semantic Retrieval → Mistral AI → Cited Answer
                                           ↓
                                     Critic Agent
+                                    (faithfulness / relevance / completeness)
                                           ↓
-                                   Feedback Log
+                                   Feedback Log (JSONL)
 ```
 
 ---
 
 ## 🔮 Future Work
 
-- Multi-language support via tree-sitter (JS, Java, Go)
+- Multi-language support via tree-sitter (Java, Go, Rust)
 - Call graph tracing for dependency analysis
 - Auto TOP_K tuning based on feedback scores
-- Fine-tuning embeddings on code-specific data
+- Fine-tuning embeddings on code-specific datasets
+- Support for private GitHub repositories
 
 ---
 
 ## 👤 Author
 
-**Snehal Laldas**  
-Final Year CS Project  
+**Snehal Laldas**
+Final Year CS Project
 GitHub: [@Snehallaldas](https://github.com/Snehallaldas)
