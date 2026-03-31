@@ -30,13 +30,35 @@ def ingest(req: IngestRequest):
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_path = load_from_github(req.github_url, tmpdir)
-            py_files  = collect_python_files(repo_path)
-            chunks    = chunk_repository(py_files, repo_path)
+
+            # use new multi-language collector
+            from ingestion.repo_loader import collect_supported_files
+            from ingestion.ast_chunker import chunk_repository_multilang
+
+            files_by_lang = collect_supported_files(repo_path)
+            total_files = sum(len(v) for v in files_by_lang.items())
+
+            if not any(files_by_lang.values()):
+                raise HTTPException(
+                    status_code=400,
+                    detail="No supported files found. Supported: Python, JavaScript, TypeScript."
+                )
+
+            chunks = chunk_repository_multilang(files_by_lang, repo_path)
             store_chunks(chunks)
-        return {"status": "ok", "chunks_stored": len(chunks)}
+
+        return {
+            "status": "ok",
+            "chunks_stored": len(chunks),
+            "files_found": {
+                "python": len(files_by_lang["python"]),
+                "javascript": len(files_by_lang["javascript"]),
+            }
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 # ── Basic Query ──────────────────────────────────────────
 @app.post("/query")
