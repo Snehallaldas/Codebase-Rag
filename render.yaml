@@ -10,5 +10,7 @@ services:
         value: "true"
       - key: MISTRAL_API_KEY
         value: "YOUR_MISTRAL_API_KEY"
-      - key: CHROMA_PERSIST_DIR
-        value: "./chroma_store"
+      - key: PINECONE_API_KEY
+        value: "YOUR_PINECONE_API_KEY"
+      - key: PINECONE_INDEX_NAME
+        value: "codebase-rag"

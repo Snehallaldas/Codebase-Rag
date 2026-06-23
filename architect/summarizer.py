@@ -1,36 +1,40 @@
 # architect/summarizer.py
 import random
-from config import CHROMA_PERSIST_DIR
-from retrieval.retriever import get_collection
+from retrieval.retriever import get_pinecone_index
 from retrieval.generator import generate_answer
 
 
 def sample_chunks_broadly(n: int = 20) -> list[dict]:
     """
-    Fetches a broad sample of chunks from ChromaDB.
-    Uses get() instead of query() — no semantic search, just coverage.
+    Fetches a broad sample of chunks from Pinecone.
+    Uses a dummy zero vector query to sample files.
     """
-    collection = get_collection(CHROMA_PERSIST_DIR)
-    total = collection.count()
-    fetch_n = min(n, total)
-
-    result = collection.get(
-        limit=fetch_n,
-        include=["documents", "metadatas"]
+    index = get_pinecone_index()
+    
+    # Query with a zero vector to retrieve up to n documents
+    dummy_vector = [0.0] * 1024
+    results = index.query(
+        vector=dummy_vector,
+        top_k=n,
+        include_metadata=True
     )
-
+    
     chunks = []
-    for doc, meta in zip(result["documents"], result["metadatas"]):
+    if not results or "matches" not in results:
+        return chunks
+        
+    for match in results["matches"]:
+        meta = match.get("metadata", {})
         chunks.append({
-            "content":    doc,
+            "content":    meta.get("content", ""),
             "file_path":  meta.get("file_path", "unknown"),
             "name":       meta.get("name", "unknown"),
             "chunk_type": meta.get("chunk_type", "unknown"),
-            "start_line": meta.get("start_line", 0),
-            "end_line":   meta.get("end_line", 0),
+            "start_line": int(meta.get("start_line", 0)),
+            "end_line":   int(meta.get("end_line", 0)),
         })
 
-    # shuffle so we don't always get the same files if total > n
+    # shuffle so we don't always get the same files
     random.shuffle(chunks)
     return chunks
 

@@ -1,55 +1,77 @@
 # ingestion/embedder.py
-import chromadb
-from config import CHROMA_PERSIST_DIR
+from pinecone import Pinecone, ServerlessSpec
+from config import PINECONE_API_KEY, PINECONE_INDEX_NAME
 from ingestion.ast_chunker import CodeChunk
 from retrieval.embeddings import embed_texts
 
-COLLECTION_NAME = "codebase"
+def get_pinecone_client() -> Pinecone:
+    if not PINECONE_API_KEY:
+        raise RuntimeError("PINECONE_API_KEY is required to connect to Pinecone.")
+    return Pinecone(api_key=PINECONE_API_KEY)
 
-def get_chroma_client(persist_dir: str = CHROMA_PERSIST_DIR) -> chromadb.PersistentClient:
-    return chromadb.PersistentClient(path=persist_dir)
+def get_pinecone_index(pc: Pinecone):
+    # Check if index exists, create if not
+    # We use serverless spec (AWS us-east-1 is the default free tier)
+    if PINECONE_INDEX_NAME not in pc.list_indexes().names():
+        print(f"Creating Pinecone index: {PINECONE_INDEX_NAME}...")
+        pc.create_index(
+            name=PINECONE_INDEX_NAME,
+            dimension=1024, # mistral-embed dimensions
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
+        )
+    return pc.Index(PINECONE_INDEX_NAME)
 
-
-def get_or_create_collection(client: chromadb.PersistentClient):
-    return client.get_or_create_collection(
-        name=COLLECTION_NAME,
-        metadata={"hnsw:space": "cosine"},
-    )
-
-
-def store_chunks(chunks: list[CodeChunk], persist_dir: str = CHROMA_PERSIST_DIR):
+def store_chunks(chunks: list[CodeChunk], persist_dir: str = None):
     """
-    Embeds and stores all chunks in ChromaDB.
-    Replaces existing collection for the same repo (fresh ingest).
+    Embeds and stores all chunks in Pinecone.
+    Wipes the index first for a fresh ingest.
     """
-    client = get_chroma_client(persist_dir)
+    if not chunks:
+        print("No chunks to store.")
+        return None
 
-    # delete and recreate for a fresh ingest
+    pc = get_pinecone_client()
+    index = get_pinecone_index(pc)
+
+    # Clean existing vectors for a fresh ingest
     try:
-        client.delete_collection(COLLECTION_NAME)
-    except Exception:
-        pass
+        print("Clearing existing vectors in Pinecone index...")
+        index.delete(delete_all=True)
+    except Exception as e:
+        print(f"Failed to clear Pinecone index: {e}")
 
-    collection = get_or_create_collection(client)
-
-    # ChromaDB batch limit is 5461 — chunk your batches
-    BATCH_SIZE = 500
+    # Pinecone recommended batch size is ~100 vectors
+    BATCH_SIZE = 100
     for i in range(0, len(chunks), BATCH_SIZE):
         batch = chunks[i : i + BATCH_SIZE]
         documents = [c.content for c in batch]
-        collection.add(
-            ids=[c.chunk_id for c in batch],
-            documents=documents,
-            embeddings=embed_texts(documents),
-            metadatas=[{
-                "file_path":   c.file_path,
-                "chunk_type":  c.chunk_type,
-                "name":        c.name,
-                "start_line":  c.start_line,
-                "end_line":    c.end_line,
-                "language":    c.language,
-            } for c in batch],
-        )
+        
+        print(f"Embedding batch {i // BATCH_SIZE + 1} ({len(batch)} chunks)...")
+        embeddings = embed_texts(documents)
+        
+        vectors_to_upsert = []
+        for chunk, embedding in zip(batch, embeddings):
+            safe_id = chunk.chunk_id.encode('ascii', errors='ignore').decode('ascii')
+            vectors_to_upsert.append({
+                "id": safe_id,
+                "values": embedding,
+                "metadata": {
+                    "file_path":   chunk.file_path,
+                    "chunk_type":  chunk.chunk_type,
+                    "name":        chunk.name,
+                    "start_line":  chunk.start_line,
+                    "end_line":    chunk.end_line,
+                    "language":    chunk.language,
+                    "content":     chunk.content,
+                }
+            })
+            
+        print(f"Upserting batch {i // BATCH_SIZE + 1} to Pinecone...")
+        index.upsert(vectors=vectors_to_upsert)
 
-    print(f"Stored {len(chunks)} chunks in ChromaDB.")
-    return collection
+    print(f"Successfully stored {len(chunks)} chunks in Pinecone index: {PINECONE_INDEX_NAME}.")
+    return index

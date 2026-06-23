@@ -12,7 +12,7 @@ from retrieval.prompt_builder import build_prompt
 from retrieval.generator import generate_answer
 from critic.critic_agent import score_answer
 from critic.feedback_store import log_feedback, load_feedback, average_scores
-from config import CHROMA_PERSIST_DIR, ENABLE_INGEST
+from config import ENABLE_INGEST
 
 app = FastAPI(title="Codebase RAG")
 
@@ -47,7 +47,7 @@ def ingest(req: IngestRequest):
                 )
 
             chunks = chunk_repository_multilang(files_by_lang, repo_path)
-            store_chunks(chunks, persist_dir=CHROMA_PERSIST_DIR)
+            store_chunks(chunks)
 
         return {
             "status": "ok",
@@ -66,7 +66,7 @@ def ingest(req: IngestRequest):
 @app.post("/query")
 def query(req: QueryRequest):
     try:
-        chunks  = retrieve_chunks(req.question, top_k=req.top_k, persist_dir=CHROMA_PERSIST_DIR)
+        chunks  = retrieve_chunks(req.question, top_k=req.top_k)
         prompt  = build_prompt(req.question, chunks)
         answer  = generate_answer(prompt)
         return {
@@ -93,7 +93,7 @@ def query(req: QueryRequest):
 @app.post("/query/evaluated")
 def query_evaluated(req: QueryRequest):
     try:
-        chunks  = retrieve_chunks(req.question, top_k=req.top_k, persist_dir=CHROMA_PERSIST_DIR)
+        chunks  = retrieve_chunks(req.question, top_k=req.top_k)
         prompt  = build_prompt(req.question, chunks)
         answer  = generate_answer(prompt)
         scores  = score_answer(req.question, chunks, answer)

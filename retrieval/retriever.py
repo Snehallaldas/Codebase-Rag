@@ -1,49 +1,50 @@
 # retrieval/retriever.py
-import chromadb
-from config import CHROMA_PERSIST_DIR
+from pinecone import Pinecone
+from config import PINECONE_API_KEY, PINECONE_INDEX_NAME
 from retrieval.embeddings import embed_text
 
-COLLECTION_NAME = "codebase"
+def get_pinecone_index():
+    if not PINECONE_API_KEY:
+        raise ValueError("PINECONE_API_KEY is required but not configured.")
+    
+    pc = Pinecone(api_key=PINECONE_API_KEY)
+    
+    # Check if index exists, raise ValueError if it doesn't (so main.py returns 400 Bad Request)
+    if PINECONE_INDEX_NAME not in pc.list_indexes().names():
+        raise ValueError("No codebase has been ingested yet. Please ingest a repository first.")
+        
+    return pc.Index(PINECONE_INDEX_NAME)
 
-def get_collection(persist_dir: str = CHROMA_PERSIST_DIR):
-    client = chromadb.PersistentClient(path=persist_dir)
-    try:
-        return client.get_collection(name=COLLECTION_NAME)
-    except Exception as e:
-        # ChromaDB raises ValueError (or specific client errors) when collection doesn't exist
-        err_msg = str(e)
-        if "does not exist" in err_msg or "CollectionNotExists" in type(e).__name__:
-            raise ValueError("No codebase has been ingested yet. Please ingest a repository first.")
-        raise
-
-
-
-def retrieve_chunks(query: str, top_k: int = 5, persist_dir: str = CHROMA_PERSIST_DIR) -> list[dict]:
+def retrieve_chunks(query: str, top_k: int = 5, persist_dir: str = None) -> list[dict]:
     """
-    Retrieves the top_k most relevant code chunks for a query.
+    Retrieves the top_k most relevant code chunks for a query from Pinecone.
     Returns list of dicts with content + metadata.
     """
-    collection = get_collection(persist_dir)
-    results = collection.query(
-        query_embeddings=[embed_text(query)],
-        n_results=top_k,
-        include=["documents", "metadatas", "distances"]
+    index = get_pinecone_index()
+    query_vector = embed_text(query)
+    
+    results = index.query(
+        vector=query_vector,
+        top_k=top_k,
+        include_metadata=True
     )
-
+    
     chunks = []
-    for doc, meta, dist in zip(
-        results["documents"][0],
-        results["metadatas"][0],
-        results["distances"][0]
-    ):
+    if not results or "matches" not in results:
+        return chunks
+        
+    for match in results["matches"]:
+        meta = match.get("metadata", {})
+        score = match.get("score", 0.0)
+        
         chunks.append({
-            "content":    doc,
+            "content":    meta.get("content", ""),
             "file_path":  meta.get("file_path", "unknown"),
             "name":       meta.get("name", "unknown"),
             "chunk_type": meta.get("chunk_type", "unknown"),
-            "start_line": meta.get("start_line", 0),
-            "end_line":   meta.get("end_line", 0),
-            "score":      round(1 - dist, 4),  # cosine similarity
+            "start_line": int(meta.get("start_line", 0)),
+            "end_line":   int(meta.get("end_line", 0)),
+            "score":      round(score, 4),  # Pinecone returns cosine similarity directly
         })
-
+        
     return chunks
