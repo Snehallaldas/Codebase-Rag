@@ -20,6 +20,11 @@ if st.button("Ingest"):
                 if res.status_code == 200:
                     data = res.json()
                     st.success(f"Successfully ingested! Stored {data.get('chunks_stored', 0)} chunks.")
+                elif res.status_code == 403:
+                    st.error(
+                        "Ingestion is disabled on this deployment.\n\n"
+                        "**To enable it:** Go to your Render dashboard → Environment → set `ENABLE_INGEST = true` → Save & Redeploy."
+                    )
                 else:
                     try:
                         err_detail = res.json().get("detail", res.text)
