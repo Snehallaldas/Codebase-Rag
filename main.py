@@ -75,7 +75,7 @@ def query(req: QueryRequest):
                 {
                     "file":   c["file_path"],
                     "name":   c["name"],
-                    "lines":  f"{c['start_line']}–{c['end_line']}",
+                    "lines":  f"{c['start_line']}-{c['end_line']}",
                     "score":  c["score"],
                 }
                 for c in chunks
@@ -101,7 +101,7 @@ def query_evaluated(req: QueryRequest):
                 {
                     "file":   c["file_path"],
                     "name":   c["name"],
-                    "lines":  f"{c['start_line']}–{c['end_line']}",
+                    "lines":  f"{c['start_line']}-{c['end_line']}",
                     "score":  c["score"],
                 }
                 for c in chunks

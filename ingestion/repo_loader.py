@@ -34,7 +34,7 @@ def collect_python_files(repo_path: str) -> list[str]:
 def collect_supported_files(repo_path: str) -> dict:
     """
     Returns dict of language -> list of file paths.
-    Supports Python and JavaScript/TypeScript.
+    Supports Python, JavaScript/TypeScript, HTML, JSON, and Markdown.
     """
     skip_dirs = {
         "__pycache__", ".git", "migrations", "node_modules",
@@ -56,5 +56,11 @@ def collect_supported_files(repo_path: str) -> dict:
                 files["python"].append(full_path)
             elif f.endswith((".js", ".ts", ".jsx", ".tsx")):
                 files["javascript"].append(full_path)
+            elif f.endswith((".html", ".htm")):
+                files["html"].append(full_path)
+            elif f.endswith(".json"):
+                files["json"].append(full_path)
+            elif f.endswith(".md"):
+                files["markdown"].append(full_path)
 
     return files
