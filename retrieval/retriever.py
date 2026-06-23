@@ -1,10 +1,11 @@
 # retrieval/retriever.py
 import chromadb
 from chromadb.utils import embedding_functions
+from config import CHROMA_PERSIST_DIR
 
 COLLECTION_NAME = "codebase"
 
-def get_collection(persist_dir: str = "./chroma_store"):
+def get_collection(persist_dir: str = CHROMA_PERSIST_DIR):
     client = chromadb.PersistentClient(path=persist_dir)
     ef = embedding_functions.SentenceTransformerEmbeddingFunction(
         model_name="all-MiniLM-L6-v2"
@@ -12,7 +13,7 @@ def get_collection(persist_dir: str = "./chroma_store"):
     return client.get_collection(name=COLLECTION_NAME, embedding_function=ef)
 
 
-def retrieve_chunks(query: str, top_k: int = 5, persist_dir: str = "./chroma_store") -> list[dict]:
+def retrieve_chunks(query: str, top_k: int = 5, persist_dir: str = CHROMA_PERSIST_DIR) -> list[dict]:
     """
     Retrieves the top_k most relevant code chunks for a query.
     Returns list of dicts with content + metadata.

@@ -1,11 +1,12 @@
 # ingestion/embedder.py
 import chromadb
 from chromadb.utils import embedding_functions
+from config import CHROMA_PERSIST_DIR
 from ingestion.ast_chunker import CodeChunk
 
 COLLECTION_NAME = "codebase"
 
-def get_chroma_client(persist_dir: str = "./chroma_store") -> chromadb.PersistentClient:
+def get_chroma_client(persist_dir: str = CHROMA_PERSIST_DIR) -> chromadb.PersistentClient:
     return chromadb.PersistentClient(path=persist_dir)
 
 
@@ -20,7 +21,7 @@ def get_or_create_collection(client: chromadb.PersistentClient):
     )
 
 
-def store_chunks(chunks: list[CodeChunk], persist_dir: str = "./chroma_store"):
+def store_chunks(chunks: list[CodeChunk], persist_dir: str = CHROMA_PERSIST_DIR):
     """
     Embeds and stores all chunks in ChromaDB.
     Replaces existing collection for the same repo (fresh ingest).

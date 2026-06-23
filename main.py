@@ -3,14 +3,16 @@ import tempfile
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from architect.summarizer import generate_architecture_summary
-from ingestion.repo_loader import load_from_github, collect_python_files
-from ingestion.ast_chunker import chunk_repository
 from ingestion.embedder import store_chunks
+from ingestion.repo_loader import load_from_github
+from ingestion.ast_chunker import chunk_repository_multilang
+from ingestion.repo_loader import collect_supported_files
 from retrieval.retriever import retrieve_chunks
 from retrieval.prompt_builder import build_prompt
 from retrieval.generator import generate_answer
 from critic.critic_agent import score_answer
 from critic.feedback_store import log_feedback, load_feedback, average_scores
+from config import CHROMA_PERSIST_DIR, ENABLE_INGEST
 
 app = FastAPI(title="Codebase RAG")
 
@@ -27,16 +29,16 @@ class QueryRequest(BaseModel):
 # ── Ingest ───────────────────────────────────────────────
 @app.post("/ingest")
 def ingest(req: IngestRequest):
+    if not ENABLE_INGEST:
+        raise HTTPException(
+            status_code=403,
+            detail="Ingestion is disabled in this deployment. Use a dedicated ingestion job or enable ingestion with the ENABLE_INGEST environment variable."
+        )
+
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_path = load_from_github(req.github_url, tmpdir)
-
-            # use new multi-language collector
-            from ingestion.repo_loader import collect_supported_files
-            from ingestion.ast_chunker import chunk_repository_multilang
-
             files_by_lang = collect_supported_files(repo_path)
-            total_files = sum(len(v) for v in files_by_lang.items())
 
             if not any(files_by_lang.values()):
                 raise HTTPException(
@@ -45,7 +47,7 @@ def ingest(req: IngestRequest):
                 )
 
             chunks = chunk_repository_multilang(files_by_lang, repo_path)
-            store_chunks(chunks)
+            store_chunks(chunks, persist_dir=CHROMA_PERSIST_DIR)
 
         return {
             "status": "ok",
@@ -64,7 +66,7 @@ def ingest(req: IngestRequest):
 @app.post("/query")
 def query(req: QueryRequest):
     try:
-        chunks  = retrieve_chunks(req.question, top_k=req.top_k)
+        chunks  = retrieve_chunks(req.question, top_k=req.top_k, persist_dir=CHROMA_PERSIST_DIR)
         prompt  = build_prompt(req.question, chunks)
         answer  = generate_answer(prompt)
         return {
@@ -87,7 +89,7 @@ def query(req: QueryRequest):
 @app.post("/query/evaluated")
 def query_evaluated(req: QueryRequest):
     try:
-        chunks  = retrieve_chunks(req.question, top_k=req.top_k)
+        chunks  = retrieve_chunks(req.question, top_k=req.top_k, persist_dir=CHROMA_PERSIST_DIR)
         prompt  = build_prompt(req.question, chunks)
         answer  = generate_answer(prompt)
         scores  = score_answer(req.question, chunks, answer)

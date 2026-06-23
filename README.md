@@ -99,6 +99,13 @@ pip install -r requirements.txt
 MISTRAL_API_KEY=your_mistral_api_key_here
 ```
 
+Optional:
+```
+CHROMA_PERSIST_DIR=./chroma_store
+ENABLE_INGEST=true
+API_URL=http://127.0.0.1:8000
+```
+
 ---
 
 ## ▶️ Running the App
@@ -119,7 +126,36 @@ Then open:
 
 ---
 
-## 📡 API Endpoints
+## � Offline ingestion workflow
+
+If the Render instance is too small for ingestion, run ingestion locally or on a larger machine:
+
+```bash
+python ingestion/run_ingest.py https://github.com/Snehallaldas/Codebase-Rag
+```
+
+This will clone the repo, chunk supported files, embed them, and store vectors in `CHROMA_PERSIST_DIR`.
+
+If you deploy only the backend on Render, set `ENABLE_INGEST=false` in Render environment variables so the deployed API serves queries only.
+
+---
+
+## ☁️ Render deployment
+
+Use `render.yaml` or Render service settings with:
+
+- `buildCommand`: `pip install -r requirements.txt`
+- `startCommand`: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+- env vars:
+  - `MISTRAL_API_KEY`
+  - `ENABLE_INGEST=false`
+  - `CHROMA_PERSIST_DIR=./chroma_store`
+
+If you want a query-only deployment, ingest the repo elsewhere and copy the `chroma_store` folder to Render or a mounted persistent store.
+
+---
+
+## �📡 API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|

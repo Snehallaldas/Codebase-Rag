@@ -1,5 +1,6 @@
 # architect/summarizer.py
 import random
+from config import CHROMA_PERSIST_DIR
 from retrieval.retriever import get_collection
 from retrieval.generator import generate_answer
 
@@ -9,7 +10,7 @@ def sample_chunks_broadly(n: int = 20) -> list[dict]:
     Fetches a broad sample of chunks from ChromaDB.
     Uses get() instead of query() — no semantic search, just coverage.
     """
-    collection = get_collection()
+    collection = get_collection(CHROMA_PERSIST_DIR)
     total = collection.count()
     fetch_n = min(n, total)
 
