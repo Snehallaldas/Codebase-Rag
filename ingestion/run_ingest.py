@@ -1,6 +1,10 @@
 # ingestion/run_ingest.py
 import sys
 import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from config import CHROMA_PERSIST_DIR
 from ingestion.repo_loader import load_from_github, collect_supported_files
 from ingestion.ast_chunker import chunk_repository_multilang
