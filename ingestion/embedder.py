@@ -42,7 +42,11 @@ def store_chunks(chunks: list[CodeChunk], persist_dir: str = None):
         print("Clearing existing vectors in Pinecone index...")
         index.delete(delete_all=True)
     except Exception as e:
-        print(f"Failed to clear Pinecone index: {e}")
+        err_str = str(e)
+        if "Namespace not found" in err_str or "404" in err_str:
+            print("Index is empty (no existing vectors to clear). Proceeding with ingest.")
+        else:
+            print(f"Warning: Failed to clear Pinecone index: {e}")
 
     # Pinecone recommended batch size is ~100 vectors
     BATCH_SIZE = 100

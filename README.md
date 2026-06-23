@@ -8,9 +8,9 @@ Built as a Final Year CS Project.
 
 ## 🚀 What it does
 
-- **Ingests** any public GitHub repository via URL
+- **Ingests** any public GitHub repository via URL (clones via Git or downloads as ZIP if Git is unavailable)
 - **Parses** files using AST-based chunking for Python and regex-based chunking for JavaScript/TypeScript
-- **Embeds** code chunks into a ChromaDB vector store
+- **Embeds** code chunks using Mistral AI embeddings and stores them in **Pinecone Cloud Vector Database**
 - **Answers** natural language questions with file path + line number citations
 - **Critiques** its own answers using a second Mistral AI agent (faithfulness, relevance, completeness)
 - **Summarizes** entire codebase architecture automatically
@@ -33,12 +33,12 @@ Built as a Final Year CS Project.
 | Layer | Technology |
 |---|---|
 | Backend | FastAPI |
-| Vector Store | ChromaDB |
-| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
+| Vector Store | **Pinecone** (Cloud) |
+| Embeddings | Mistral AI (`mistral-embed`) |
 | LLM | Mistral AI |
 | Python Parsing | Python `ast` module |
 | JS/TS Parsing | Regex-based chunker |
-| Repo Ingestion | GitPython |
+| Repo Ingestion | GitPython + ZIP fallback |
 | Frontend | Streamlit |
 
 ---
@@ -56,18 +56,21 @@ codebase_rag/
 ├── ingestion/
 │   ├── __init__.py
 │   ├── ast_chunker.py       # AST chunking (Python) + regex chunking (JS/HTML/JSON/MD)
-│   ├── embedder.py          # Embed + store chunks in ChromaDB
-│   ├── repo_loader.py       # Clone GitHub repos, collect supported files
+│   ├── embedder.py          # Embed + store chunks in Pinecone
+│   ├── repo_loader.py       # Clone GitHub repos (with ZIP fallback), collect supported files
 │   └── run_ingest.py        # Standalone ingestion script
 ├── retrieval/
 │   ├── __init__.py
+│   ├── embeddings.py        # Mistral AI embedding API wrapper
 │   ├── generator.py         # Mistral AI answer generation
 │   ├── prompt_builder.py    # Build code-aware prompts with citations
-│   └── retriever.py         # Query ChromaDB
+│   └── retriever.py         # Query Pinecone
 ├── .gitignore
+├── config.py                # Centralized configuration (env vars)
 ├── feedback_log.jsonl        # Auto-generated query feedback log
 ├── main.py                  # FastAPI app
 ├── README.md
+├── render.yaml              # Render deployment config
 ├── requirements.txt
 └── ui.py                    # Streamlit frontend
 ```
@@ -97,11 +100,16 @@ pip install -r requirements.txt
 **4. Create `.env` file**
 ```
 MISTRAL_API_KEY=your_mistral_api_key_here
+PINECONE_API_KEY=your_pinecone_api_key_here
+PINECONE_INDEX_NAME=codebase-rag
 ```
+
+> **Get your API keys:**
+> - Mistral AI: https://console.mistral.ai/
+> - Pinecone: https://app.pinecone.io/ (free tier available)
 
 Optional:
 ```
-CHROMA_PERSIST_DIR=./chroma_store
 ENABLE_INGEST=true
 API_URL=http://127.0.0.1:8000
 ```
@@ -126,40 +134,48 @@ Then open:
 
 ---
 
-## � Offline ingestion workflow
+## 📥 Ingesting a Repository
 
-If the Render instance is too small for ingestion, run ingestion locally or on a larger machine:
+You can ingest any public GitHub repository either through the UI or the CLI.
 
+### Via Streamlit UI
+1. Open `http://localhost:8501`
+2. Paste a GitHub URL in the **Ingest a Repo** section
+3. Click **Ingest**
+
+### Via CLI (Offline / Local)
 ```bash
-python ingestion/run_ingest.py https://github.com/Snehallaldas/Codebase-Rag
+python ingestion/run_ingest.py https://github.com/owner/repo
 ```
 
-This will clone the repo, chunk supported files, embed them, and store vectors in `CHROMA_PERSIST_DIR`.
-
-If you deploy only the backend on Render, set `ENABLE_INGEST=false` in Render environment variables so the deployed API serves queries only.
+This will clone the repo (or download it as a ZIP if Git is unavailable), chunk supported files, generate Mistral embeddings, and upload vectors to your Pinecone index.
 
 ---
 
-## ☁️ Render deployment
+## ☁️ Render Deployment
 
-Use `render.yaml` or Render service settings with:
+Use `render.yaml` or configure a Render web service with:
 
 - `buildCommand`: `pip install -r requirements.txt`
 - `startCommand`: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-- env vars:
-  - `MISTRAL_API_KEY`
-  - `ENABLE_INGEST=false`
-  - `CHROMA_PERSIST_DIR=./chroma_store`
+- **Environment Variables:**
 
-If you want a query-only deployment, ingest the repo elsewhere and copy the `chroma_store` folder to Render or a mounted persistent store.
+| Key | Value |
+|---|---|
+| `MISTRAL_API_KEY` | Your Mistral API key |
+| `PINECONE_API_KEY` | Your Pinecone API key |
+| `PINECONE_INDEX_NAME` | `codebase-rag` (or your index name) |
+| `ENABLE_INGEST` | `true` |
+
+> **Note**: Since all vectors are stored in Pinecone Cloud, your data is **persistent across Render restarts** with no extra configuration needed.
 
 ---
 
-## �📡 API Endpoints
+## 📡 API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/ingest` | Ingest a GitHub repo |
+| POST | `/ingest` | Ingest a GitHub repo into Pinecone |
 | POST | `/query` | Ask a question, get cited answer |
 | POST | `/query/evaluated` | Ask + get critic scores |
 | GET | `/architecture` | Generate full architecture summary |
@@ -192,11 +208,13 @@ If you want a query-only deployment, ingest the repo elsewhere and copy the `chr
 ```
 GitHub URL
     ↓
-Repo Loader (GitPython)
+Repo Loader (GitPython / ZIP fallback)
     ↓
 AST / Regex Chunker (Python, JS, HTML, JSON, MD)
     ↓
-ChromaDB (vector store)
+Mistral AI Embeddings
+    ↓
+Pinecone Cloud Vector Database
     ↓
 User Question → Semantic Retrieval → Mistral AI → Cited Answer
                                           ↓
