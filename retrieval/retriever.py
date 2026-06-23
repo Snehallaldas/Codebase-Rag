@@ -1,16 +1,13 @@
 # retrieval/retriever.py
 import chromadb
-from chromadb.utils import embedding_functions
 from config import CHROMA_PERSIST_DIR
+from retrieval.embeddings import embed_text
 
 COLLECTION_NAME = "codebase"
 
 def get_collection(persist_dir: str = CHROMA_PERSIST_DIR):
     client = chromadb.PersistentClient(path=persist_dir)
-    ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="all-MiniLM-L6-v2"
-    )
-    return client.get_collection(name=COLLECTION_NAME, embedding_function=ef)
+    return client.get_collection(name=COLLECTION_NAME)
 
 
 def retrieve_chunks(query: str, top_k: int = 5, persist_dir: str = CHROMA_PERSIST_DIR) -> list[dict]:
@@ -20,7 +17,7 @@ def retrieve_chunks(query: str, top_k: int = 5, persist_dir: str = CHROMA_PERSIS
     """
     collection = get_collection(persist_dir)
     results = collection.query(
-        query_texts=[query],
+        query_embeddings=[embed_text(query)],
         n_results=top_k,
         include=["documents", "metadatas", "distances"]
     )

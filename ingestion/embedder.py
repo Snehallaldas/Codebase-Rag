@@ -1,8 +1,8 @@
 # ingestion/embedder.py
 import chromadb
-from chromadb.utils import embedding_functions
 from config import CHROMA_PERSIST_DIR
 from ingestion.ast_chunker import CodeChunk
+from retrieval.embeddings import embed_texts
 
 COLLECTION_NAME = "codebase"
 
@@ -11,12 +11,8 @@ def get_chroma_client(persist_dir: str = CHROMA_PERSIST_DIR) -> chromadb.Persist
 
 
 def get_or_create_collection(client: chromadb.PersistentClient):
-    ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="all-MiniLM-L6-v2"  # fast, good for code
-    )
     return client.get_or_create_collection(
         name=COLLECTION_NAME,
-        embedding_function=ef,
         metadata={"hnsw:space": "cosine"},
     )
 
@@ -40,9 +36,11 @@ def store_chunks(chunks: list[CodeChunk], persist_dir: str = CHROMA_PERSIST_DIR)
     BATCH_SIZE = 500
     for i in range(0, len(chunks), BATCH_SIZE):
         batch = chunks[i : i + BATCH_SIZE]
+        documents = [c.content for c in batch]
         collection.add(
             ids=[c.chunk_id for c in batch],
-            documents=[c.content for c in batch],
+            documents=documents,
+            embeddings=embed_texts(documents),
             metadatas=[{
                 "file_path":   c.file_path,
                 "chunk_type":  c.chunk_type,
