@@ -81,6 +81,10 @@ def query(req: QueryRequest):
                 for c in chunks
             ],
         }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -107,6 +111,10 @@ def query_evaluated(req: QueryRequest):
                 for c in chunks
             ],
         }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -124,6 +132,10 @@ def feedback_summary():
 def architecture():
     try:
         return generate_architecture_summary()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     

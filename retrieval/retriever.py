@@ -7,7 +7,15 @@ COLLECTION_NAME = "codebase"
 
 def get_collection(persist_dir: str = CHROMA_PERSIST_DIR):
     client = chromadb.PersistentClient(path=persist_dir)
-    return client.get_collection(name=COLLECTION_NAME)
+    try:
+        return client.get_collection(name=COLLECTION_NAME)
+    except Exception as e:
+        # ChromaDB raises ValueError (or specific client errors) when collection doesn't exist
+        err_msg = str(e)
+        if "does not exist" in err_msg or "CollectionNotExists" in type(e).__name__:
+            raise ValueError("No codebase has been ingested yet. Please ingest a repository first.")
+        raise
+
 
 
 def retrieve_chunks(query: str, top_k: int = 5, persist_dir: str = CHROMA_PERSIST_DIR) -> list[dict]:
